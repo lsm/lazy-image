@@ -1,0 +1,21 @@
+{
+  "name": "lazy-image",
+  "description": "An image compressing/resizing http server",
+  "version": "0.1.0",
+  "homepage": "https://github.com/zir/lazy-image",
+  "keywords": ["image", "mongodb", "compress", "resize", "lossless", "jpg", "jpeg"],
+  "author": "Senmiao Liu <zir.echo@gmail.com>",
+  "repository" : {
+    "type" : "git",
+    "url" : "git://github.com/zir/lazy-image.git"
+  },
+  "main": "./index",
+  "dependencies": {
+    "gm": "~0.5.0",
+    "genji": "https://github.com/zir/genji/tarball/master",
+    "mongodb-async": "~0.1.0"
+  },
+  "engines": {
+    "node": "~0.4.8"
+  }
+}
