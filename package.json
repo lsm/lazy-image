@@ -12,7 +12,7 @@
   "main": "./index",
   "dependencies": {
     "gm": "~0.5.0",
-    "genji": "https://github.com/zir/genji/tarball/master",
+    "genji": "~0.2.2",
     "mongodb-async": "~0.1.0"
   },
   "engines": {
