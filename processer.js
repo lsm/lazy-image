@@ -231,17 +231,23 @@ function getUniqueImageName(metadata) {
 }
 
 function typeOfImage(url) {
-  switch (path.extname(url)) {
-    case '.jpg':
-    case '.jpeg':
-      return {ext: '.jpg', contentType: 'image/jpeg'};
-    case '.png':
-      return {ext: '.png', contentType: 'image/png'};
-    case '.gif':
-      return {ext: '.gif', contentType: 'image/gif'};
-    default:
-      return false;
+  try {
+    switch (path.extname(url)) {
+      case '.jpg':
+      case '.jpeg':
+        return {ext: '.jpg', contentType: 'image/jpeg'};
+      case '.png':
+        return {ext: '.png', contentType: 'image/png'};
+      case '.gif':
+        return {ext: '.gif', contentType: 'image/gif'};
+      default:
+        return false;
+    }
+  } catch(e) {
+    console.error('Failed to get ext name form url: %s', url);
+    console.error(e.stack || e);
   }
+  return {ext: '.jpg', contentType: 'image/jpeg'};
 }
 
 function imageMetaStr(metadata) {
