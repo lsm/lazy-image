@@ -20,6 +20,7 @@ function processImage(handler) {
   var deferred = processer.saveImageFromUrl(url);
   var result = [];
   deferred.and(function(defer, imageDoc) {
+    delete imageDoc.data;
       result.push(imageDoc);
     //lossless compress
       processer.compress(imageDoc, 100, defer);
@@ -41,27 +42,26 @@ function processImage(handler) {
 }
 
 function _getImage(filename, callback) {
-  imageFS
-    .read(filename)
-    .then(
-    function(data) {
-      callback(null, data);
+  var queryDoc = filename.length === 40 ? {_id: filename} : {filename: filename};
+  processer.dbCollection.findOne(queryDoc)
+    .then(function(imageDoc) {
+      callback(null, imageDoc);
     }).fail(callback);
 }
 
-function getImage(handler, filename, ext) {
-  _getImage(filename, function(err, data) {
-    if (err || !data) {
+function getImage(handler, filename) {
+  _getImage(filename, function(err, imageDoc) {
+    if (err || !imageDoc) {
       handler.error(404, 'Image not found');
     } else {
-      var headers = {type: 'image/jpeg'};
-      handler.sendAsFile(data, headers);
+      var headers = {type: imageDoc.type};
+      handler.sendAsFile(imageDoc.data.value(), headers);
     }
   });
 }
 
 app.get('^/process', processImage);
-app.get('^/image/([0-9a-zA-Z]{32})\\.(jpg|png|gif)$', getImage);
+app.get('^/image/([0-9a-zA-Z]{40})\\.(jpg|png|gif)$', getImage);
 app.notFound('.*', function(handler) {
   console.log(this.request.url);
   handler.error(404, 'invalid end point');
