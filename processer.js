@@ -20,11 +20,12 @@ var gm = require('gm');
  *
  * {
  *   _id: '441547af33d49c4f37461fa87a5bb502b40687f2', // sha1 hash of the file content
+ *   filename: '441547af33d49c4f37461fa87a5bb502b40687f2_100_200x300', // filename
+ *   coarseLocality: '201201', // the first sharding key, default is the month when the image is created
  *   data: '', // image binary data
  *   type: 'image/jpeg', // mime type
  *   length: 77031, // binary length of image
  *   created: ISODate("2011-08-27T17:45:29.976Z"), // date created
- *   filename: '441547af33d49c4f37461fa87a5bb502b40687f2', // filename (optional)
  *   url: 'http://p0.meituan.net/deal/201108/24/shotu1.jpg', // url of oringinal image (optional)
  *   quality: 100, // image quality (optional),
  *   width: 200, // image width in px (optional)
@@ -60,15 +61,28 @@ function ImageProcesser(db, options) {
     quality: 1,
     width: 1,
     height: 1,
-    url: 1
+    url: 1,
+    coarseLocality: 1
   };
 }
 
 ImageProcesser.prototype = {
   saveImageFromUrl: saveImageFromUrl,
-  saveImageFile: saveImageFileAndRemove,
+  saveImageFileAndRemove: saveImageFileAndRemove,
   compress: compress,
-  resize: resize
+  resize: resize,
+  loadImageToPath: loadImageToPath,
+  compressImageAtPath: compressImageAtPath,
+  resizeImageAtPath: resizeImageAtPath,
+  getCoarseLocality: function() {
+    var date = new Date;
+    var year = date.getUTCFullYear();
+    var month = date.getUTCMonth() + 1;
+    if (month < 10) {
+      month = '0' + month;
+    }
+    return year + '' + month;
+  }
 };
 
 exports.ImageProcesser = ImageProcesser;
@@ -133,20 +147,17 @@ function saveImageFileAndRemove(filePath, options, outerDefer) {
 function compress(imageDoc, quality, outerDefer) {
   var self = this;
   quality = quality || 100;
-  var filename = generateFilename({
-    _id: imageDoc._id,
+  var imageDoc_ = setImageDocOption(imageDoc, {
     quality: quality
   });
-  imageDoc = setImageDocOption(imageDoc, {
-    quality: quality
-  });
+  var filename = generateFilename(imageDoc_);
   this.dbCollection.findOne({filename: filename}, {fields: this.defaultFields}).and(
     function(defer, imageFound) {
       if (imageFound) {
         // we already have this image compressed with this quality
         outerDefer.next(imageFound);
       } else {
-        var fileToLoad = quality === 100 ? imageDoc._id : filename;
+        var fileToLoad = quality === 100 ? imageDoc_._id : filename;
         loadImageToPath.call(self, defer, fileToLoad);
       }
     })
@@ -154,7 +165,7 @@ function compress(imageDoc, quality, outerDefer) {
       compressImageAtPath(defer, filePath, quality);
     })
     .and(function(defer, filePath, quality) {
-      saveImageFileAndRemove.call(self, filePath, imageDoc, defer);
+      self.saveImageFileAndRemove(filePath, imageDoc_, defer);
     })
     .and(function(defer, compressedImageDoc) {
       delete compressedImageDoc.data;
@@ -171,35 +182,23 @@ function compress(imageDoc, quality, outerDefer) {
  */
 function resize(imageDoc, options, outerDefer) {
   options.quality = options.quality || 100;
-  var filename = generateFilename({
-    _id: imageDoc._id,
-    quality: options.quality,
-    width: options.width,
-    height: options.height
-  });
-  imageDoc = setImageDocOption(imageDoc, options);
+  var imageDoc_ = setImageDocOption(imageDoc, options);
+  var filename = generateFilename(imageDoc_);
   var self = this;
   this.dbCollection.findOne({filename: filename}, {fields: this.defaultFields})
     .and(function(defer, doc) {
       if (doc) {
         outerDefer.next(doc);
       } else {
-        var fileToLoad = options.quality === 100 ? imageDoc._id : filename;
+        var fileToLoad = options.quality === 100 ? imageDoc_._id : filename;
         loadImageToPath.call(self, defer, fileToLoad);
       }
     })
     .and(function(defer, filename, filePath) {
-      gm(filePath)
-        .resize(options.width, options.height)
-        .noProfile()
-        .quality(options.quality)
-        .write(filePath, function(err) {
-          if (err) {
-            defer.error(err);
-            return;
-          }
-          saveImageFileAndRemove.call(self, filePath, imageDoc, defer, true);
-        });
+      self.resizeImageAtPath(defer, filePath, options.quality, options.width, options.height);
+    })
+    .and(function(defer, filePath) {
+      self.saveImageFileAndRemove(filePath, imageDoc_, defer);
     })
     .and(function(defer, resizedImageDoc) {
       delete resizedImageDoc.data;
@@ -226,7 +225,7 @@ function saveImageData(defer, data, imageDoc) {
   }
   
   var imageBlob = new Binary(data);
-  var doc = extend({}, imageDoc, {
+  var doc = extend({coarseLocality: this.getCoarseLocality()}, imageDoc, {
     data: imageBlob,
     length: imageBlob.length(),
     created: new Date
@@ -286,16 +285,20 @@ function compressImageAtPath(defer, filePath, quality) {
   cmdExec(defer, jpegoptim.join(' '), function() {
     defer.next(filePath, quality);
   });
-//        gm(filePath)
-//        .noProfile()
-//        .quality(quality)
-//        .write(filePath, function(err) {
-//          if (err) {
-//            defer.error(err);
-//            return;
-//          }
-//            defer.next(filePath, quality);
-//        });
+}
+
+function resizeImageAtPath(defer, filePath, quality, width, height) {
+  gm(filePath)
+    .resize(width, height)
+    .noProfile()
+    .quality(quality)
+    .write(filePath, function(err) {
+      if (err) {
+        defer.error(err);
+        return;
+      }
+      defer.next(filePath);
+    });
 }
 
 /**
@@ -362,31 +365,16 @@ function typeOfImage(url) {
   return {ext: '.jpg', contentType: 'image/jpeg'};
 }
 
-function imageMetaStr(metadata) {
-  var str = [];
-
-  function appendStr(key) {
-    if (metadata[key]) {
-      str.push(key, metadata[key]);
-    }
-  }
-
-  appendStr('url');
-  appendStr('type');
-  appendStr('quality');
-  appendStr('size');
-  return str.join('_');
-}
-
 function setImageDocOption(doc, options) {
   if (!options) return doc;
-  if (options.url) doc.url = options.url;
+  var retDoc = extend({}, doc);
+  if (options.url) retDoc.url = options.url;
   if (options.quality) {
-    doc.quality = Number(options.quality);
+    retDoc.quality = Number(options.quality);
   }
   if (options.width && options.height) {
-    doc.width = Number(options.width);
-    doc.height = Number(options.height);
+    retDoc.width = Number(options.width);
+    retDoc.height = Number(options.height);
   }
-  return doc;
+  return retDoc;
 }

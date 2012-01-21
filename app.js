@@ -31,8 +31,8 @@ function processImage(handler) {
       } else {
         handler.sendJSON(result);
       }
-    }).and(function(defer, resized) {
-      result.push(resized);
+    }).and(function(defer, resizedDoc) {
+      result.push(resizedDoc);
       handler.sendJSON(result);
     })
     .fail(function(err) {
@@ -60,7 +60,10 @@ function getImage(handler, filename) {
   });
 }
 
+// process an image from url
 app.get('^/process', processImage);
+
+// get an existing image
 app.get('^/image/([0-9a-zA-Z]{40})\\.(jpg|png|gif)$', getImage);
 app.notFound('.*', function(handler) {
   console.log(this.request.url);
