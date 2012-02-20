@@ -1,16 +1,12 @@
 var genji = require('genji').short();
-var db;
 var rootCollection;
-var imageFS;
 var processer;
 var ImageProcesser = require('./processer').ImageProcesser;
 var app = genji.app();
 
-exports.init = function init(db_, rootCollection_) {
+exports.init = function init(db_) {
   db = db_;
-  rootCollection = rootCollection_;
   processer = new ImageProcesser(db_);
-  imageFS  = db.gridfs(rootCollection);
 };
 
 
@@ -19,32 +15,45 @@ function processImage(handler) {
   var url = params.url;
   var deferred = processer.saveImageFromUrl(url);
   var result = [];
-  deferred.and(function(defer, imageDoc) {
-    delete imageDoc.data;
-      result.push(imageDoc);
-    //lossless compress
-      processer.compress(imageDoc, 100, defer);
-    }).and(function(defer, compressedDoc) {
-      result.push(compressedDoc);
+  var originalDoc;
+  deferred.and(
+    function(defer, imageDoc) {
+      delete imageDoc.data;
+      originalDoc = imageDoc;
+      if (params.noLossless) {
+        handler.sendJSON([imageDoc]);
+        return true;
+      } else {
+        //lossless compress
+        result.push(imageDoc);
+        processer.compress(imageDoc, 100, defer);
+      }
+    },
+    function(defer, compressedDoc) {
+      if (!params.noLossless) {
+        result.push(compressedDoc);
+      }
       if (params.width && params.height) {
-        processer.resize(compressedDoc, params, defer);
+        processer.resize(originalDoc, params, defer);
       } else {
         handler.sendJSON(result);
       }
-    }).and(function(defer, resizedDoc) {
+    },
+    function(defer, resizedDoc) {
       result.push(resizedDoc);
       handler.sendJSON(result);
     })
     .fail(function(err) {
-      console.log('err: ' + err);
-      handler.error(500, err.stack || err);
+      handler.error(500, 'Image processing error');
+      console.error(err.stack || err);
     });
 }
 
 function _getImage(filename, callback) {
   var queryDoc = filename.length === 40 ? {_id: filename} : {filename: filename};
   processer.dbCollection.findOne(queryDoc)
-    .then(function(imageDoc) {
+    .then(
+    function(imageDoc) {
       callback(null, imageDoc);
     }).fail(callback);
 }
@@ -66,6 +75,6 @@ app.get('^/process', processImage);
 // get an existing image
 app.get('^/image/([0-9a-zA-Z]{40})\\.(jpg|png|gif)$', getImage);
 app.notFound('.*', function(handler) {
-  console.log(this.request.url);
   handler.error(404, 'invalid end point');
+  console.error(this.request.url);
 });
