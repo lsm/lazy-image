@@ -21,7 +21,7 @@ var gm = require('gm');
  * {
  *   _id: '441547af33d49c4f37461fa87a5bb502b40687f2', // sha1 hash of the file content
  *   filename: '441547af33d49c4f37461fa87a5bb502b40687f2_100_200x300', // filename
- *   coarseLocality: '201201', // the first sharding key, default is the month when the image is created
+ *   coarseLoc: '201201', // the first sharding key, default is the month when the image is created
  *   data: '', // image binary data
  *   type: 'image/jpeg', // mime type
  *   length: 77031, // binary length of image
@@ -52,7 +52,7 @@ function ImageProcesser(db, options) {
   var self = this;
   // ensure index
   process.nextTick(function() {
-    self.dbCollection.ensureIndex({filename: 1, url: 1});
+    self.dbCollection.ensureIndex({coarseLoc: 1, filename: 1, url: 1});
   });
   this.defaultFields = {
     filename: 1,
@@ -62,7 +62,7 @@ function ImageProcesser(db, options) {
     width: 1,
     height: 1,
     url: 1,
-    coarseLocality: 1
+    coarseLoc: 1
   };
 }
 
@@ -74,7 +74,7 @@ ImageProcesser.prototype = {
   loadImageToPath: loadImageToPath,
   compressImageAtPath: compressImageAtPath,
   resizeImageAtPath: resizeImageAtPath,
-  getCoarseLocality: function() {
+  getCoarseLoc: function() {
     var date = new Date;
     var year = date.getUTCFullYear();
     var month = date.getUTCMonth() + 1;
@@ -225,7 +225,7 @@ function saveImageData(defer, data, imageDoc) {
   }
   
   var imageBlob = new Binary(data);
-  var doc = extend({coarseLocality: this.getCoarseLocality()}, imageDoc, {
+  var doc = extend({coarseLoc: this.getCoarseLoc()}, imageDoc, {
     data: imageBlob,
     length: imageBlob.length(),
     created: new Date
@@ -238,6 +238,10 @@ function saveImageData(defer, data, imageDoc) {
   } else {
     doc._id = sha1(data);
     doc.filename = generateFilename(doc);
+  }
+  if (doc._id !== doc.filename) {
+    // save source url only for original file
+    delete doc.url;
   }
   this.dbCollection
     .insert(doc, {safe: true})
@@ -256,8 +260,8 @@ function saveImageData(defer, data, imageDoc) {
  */
 function loadImageToPath(defer, filename, filePath) {
   filePath = filePath || path.join(this.tmpDir, filename);
-  var queryDoc = filename.length === 40 ? {_id: filename} : {filename: filename};
-  this.dbCollection.findOne(queryDoc, {fields:{data: 1}}).then(
+  var _id = filename.split('_')[0];
+  this.dbCollection.findOne({_id: _id}, {fields:{data: 1}}).then(
     function(imageDoc) {
       if (imageDoc) {
         fs.writeFile(filePath, imageDoc.data.buffer, function(err) {
