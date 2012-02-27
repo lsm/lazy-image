@@ -247,17 +247,23 @@ function saveImageData(defer, data, imageDoc) {
     // save source url only for original file
     delete doc.url;
   }
-  this.imageCollection
-    .insert(doc, {safe: true})
-    .then(function(inserted) {
-      if (inserted)
-        defer.next(inserted[0]);
-    })
-    .fail(defer.error);
+  this.imageCollection.findOne({_id: doc._id}).then(function(oldDoc) {
+    if (oldDoc) {
+      defer.next(oldDoc);
+    } else {
+      this.imageCollection
+        .insert(doc, {safe:true})
+        .then(function (inserted) {
+          if (inserted)
+            defer.next(inserted[0]);
+        })
+        .fail(defer.error);
+    }
+  }).fail(defer.error);
 }
 
 /**
- * 
+ *
  * @param defer
  * @param filename
  * @param filePath
