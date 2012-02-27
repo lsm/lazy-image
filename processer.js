@@ -6,6 +6,7 @@ var crypto = genji.require('crypto');
 var sha1 = crypto.sha1;
 var path = require('path');
 var mongodbAsync = require('mongodb-async');
+var connect = mongodbAsync.connect;
 var Binary = mongodbAsync.mongodb.BSONPure.Binary;
 
 var exec = require('child_process').exec;
@@ -41,18 +42,21 @@ var gm = require('gm');
 
 /**
  *
- * @param db
  * @param options
+ * @param db
  */
-function ImageProcesser(db, options) {
-  var options_ = extend({}, {collection: 'lazy_images', tmpDir: '/tmp'}, options);
+function ImageProcesser(options, db) {
+  var options_ = extend({}, {dbCollection: 'lazy_images', tmpDir: '/tmp'}, options);
   // mongodb-async collection object
-  this.dbCollection = db.collection(options_.collection);
+  if (!db) {
+    db = connect(options_.dbHost, options_.dbPort, {poolSize:options_.dbPoolSize}).db(options_.dbName, {});
+  }
+  this.imageCollection = db.collection(options_.dbCollection);
   this.tmpDir = options_.tmpDir;
   var self = this;
   // ensure index
   process.nextTick(function() {
-    self.dbCollection.ensureIndex({coarseLoc: 1, filename: 1, url: 1});
+    self.imageCollection.ensureIndex({coarseLoc: 1, filename: 1, url: 1});
   });
   this.defaultFields = {
     filename: 1,
@@ -99,7 +103,7 @@ exports.ImageProcesser = ImageProcesser;
 function saveImageFromUrl(url) {
   var imageType = typeOfImage(url);
   var self = this;
-  return this.dbCollection.findOne({url: url}, {fields: this.defaultFields}).and(function(defer, imageFound) {
+  return this.imageCollection.findOne({url: url}, {fields: this.defaultFields}).and(function(defer, imageFound) {
     if (!imageFound) {
       var client = new Client(url);
       client.get().then(
@@ -151,7 +155,7 @@ function compress(imageDoc, quality, outerDefer) {
     quality: quality
   });
   var filename = generateFilename(imageDoc_);
-  this.dbCollection.findOne({filename: filename}, {fields: this.defaultFields}).and(
+  this.imageCollection.findOne({filename: filename}, {fields: this.defaultFields}).and(
     function(defer, imageFound) {
       if (imageFound) {
         // we already have this image compressed with this quality
@@ -185,7 +189,7 @@ function resize(imageDoc, options, outerDefer) {
   var imageDoc_ = setImageDocOption(imageDoc, options);
   var filename = generateFilename(imageDoc_);
   var self = this;
-  this.dbCollection.findOne({filename: filename}, {fields: this.defaultFields})
+  this.imageCollection.findOne({filename: filename}, {fields: this.defaultFields})
     .and(function(defer, doc) {
       if (doc) {
         outerDefer.next(doc);
@@ -243,7 +247,7 @@ function saveImageData(defer, data, imageDoc) {
     // save source url only for original file
     delete doc.url;
   }
-  this.dbCollection
+  this.imageCollection
     .insert(doc, {safe: true})
     .then(function(inserted) {
       if (inserted)
@@ -261,7 +265,7 @@ function saveImageData(defer, data, imageDoc) {
 function loadImageToPath(defer, filename, filePath) {
   filePath = filePath || path.join(this.tmpDir, filename);
   var _id = filename.split('_')[0];
-  this.dbCollection.findOne({_id: _id}, {fields:{data: 1}}).then(
+  this.imageCollection.findOne({_id: _id}, {fields:{data: 1}}).then(
     function(imageDoc) {
       if (imageDoc) {
         fs.writeFile(filePath, imageDoc.data.buffer, function(err) {
