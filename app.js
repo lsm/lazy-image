@@ -18,9 +18,14 @@ exports.createImageServer = function (options, uploadURL) {
   var options_ = genji.extend({}, defaultDBOptions, options);
   var db = connect(options_.dbHost, options_.dbPort, {poolSize:options_.dbPoolSize}).db(options_.dbName, {});
 
-  db.open().and(function (defer, db) {
-    processer = new ImageProcesser(db, options_);
-  });
+  processer = new ImageProcesser(db, options_);
+
+  db.open()
+    .fail(function (err) {
+      console.trace('Can not connect to mongodb with options: ');
+      console.error(options_);
+      throw err;
+    });
 
   // attach middleware "conditional-get"
   genji.use('conditional-get');
