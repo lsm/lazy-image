@@ -1,4 +1,5 @@
 var genji = require('genji').short();
+var Path = require('path');
 var processer;
 var ImageProcesser = require('./processer').ImageProcesser;
 var connect = require('mongodb-async').connect;
@@ -126,10 +127,18 @@ function getImage(handler, filename) {
 var formidable = require('formidable');
 
 function ImageUploader(options) {
-  this.options = genji.extend({
-    exts:['.png', '.jpg', '.jpeg'],
-    maxFieldsSize:8388608 // 8MB
-  }, defaultDBOptions, options);
+  var options_ = genji.extend({}, defaultDBOptions, options);
+  var db = connect(options_.dbHost, options_.dbPort, {poolSize:options_.dbPoolSize}).db(options_.dbName, {});
+  this.processer = new ImageProcesser(options_, db);
+  db.open()
+    .fail(function (err) {
+      console.trace('Can not connect to mongodb with options: ');
+      console.error(options_);
+      throw err;
+    });
+  // upload options
+  this.exts = options_.exts || ['.png', '.jpg', '.jpeg'];
+  this.maxFieldsSize = options_.maxFieldsSize || 8388608; // 8MB
 }
 
 ImageUploader.prototype = {
@@ -187,15 +196,18 @@ ImageUploader.prototype = {
   },
 
   saveImage:function (request, imageDoc, callback) {
-    this.parseRequest(request, function (fields, files) {
-      if (Array.isArray(files)) {
+    var self = this;
+    this.parseRequest(request, function (error, fields, files) {
+      if (error || !Array.isArray(files)) {
+        callback('Can not parse file info from request.');
+        console.error(error.stack || error);
+      } else {
         var filePath = files[0].path;
-        processer.saveImageFileAndRemove(filePath, imageDoc || {}).and(
-          function (resultImageDoc) {
+        self.processer.saveImageFileAndRemove(filePath, imageDoc || {}).and(
+          function (defer, resultImageDoc) {
+            delete resultImageDoc.data;
             callback(null, resultImageDoc);
           }).fail(callback);
-      } else {
-        callback('Can not parse file info from request.');
       }
     });
   }
