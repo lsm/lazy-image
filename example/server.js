@@ -12,7 +12,9 @@ var serverOptions = {
   dbName: 'lazy_image_test',
   dbHost: '127.0.0.1',
   dbPort: 27017,
-  dbCollection: 'images'
+  dbCollection: 'images',
+  exts:['.png', '.jpg', '.jpeg'],
+  maxFieldsSize:8388608 // 8MB
 };
 
 var server = lazyImage.createImageServer(serverOptions, '/image/upload/');
