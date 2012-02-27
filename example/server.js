@@ -6,15 +6,15 @@
 //jpegoptim
 //pngnq
 
-var lazyImage = require('./index');
+var lazyImage = require('../index.js');
 
 var serverOptions = {
   dbName: 'lazy_image_test',
   dbHost: '127.0.0.1',
   dbPort: 27017,
-  dbRootCollection: 'images'
+  dbCollection: 'images'
 };
 
-var server = lazyImage.createServer(serverOptions);
+var server = lazyImage.createImageServer(serverOptions, '/image/upload/');
 
 server.listen(7001, '127.0.0.1');
