@@ -247,11 +247,12 @@ function saveImageData(defer, data, imageDoc) {
     // save source url only for original file
     delete doc.url;
   }
+  var self = this;
   this.imageCollection.findOne({_id: doc._id}).then(function(oldDoc) {
     if (oldDoc) {
       defer.next(oldDoc);
     } else {
-      this.imageCollection
+      self.imageCollection
         .insert(doc, {safe:true})
         .then(function (inserted) {
           if (inserted)
