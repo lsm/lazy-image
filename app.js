@@ -19,7 +19,7 @@ exports.createImageServer = function (options, uploadURL) {
   var options_ = genji.extend({}, defaultDBOptions, options);
   var db = connect(options_.dbHost, options_.dbPort, {poolSize:options_.dbPoolSize}).db(options_.dbName, {});
 
-  processer = new ImageProcesser(db, options_);
+  processer = new ImageProcesser(options_, db);
 
   db.open()
     .fail(function (err) {
@@ -101,7 +101,7 @@ function processImage(handler) {
 
 function _getImage(filename, callback) {
   var queryDoc = filename.length === 40 ? {_id:filename} : {filename:filename};
-  processer.dbCollection.findOne(queryDoc)
+  processer.imageCollection.findOne(queryDoc)
     .then(
     function (imageDoc) {
       callback(null, imageDoc);
@@ -202,8 +202,10 @@ ImageUploader.prototype = {
         callback('Can not parse file info from request.');
         console.error(error.stack || error);
       } else {
-        var filePath = files[0].path;
-        self.processer.saveImageFileAndRemove(filePath, imageDoc || {}).and(
+        var file = files[0];
+        imageDoc = imageDoc || {};
+        imageDoc.type = file.type;
+        self.processer.saveImageFileAndRemove(file.path, imageDoc).and(
           function (defer, resultImageDoc) {
             delete resultImageDoc.data;
             callback(null, resultImageDoc);
