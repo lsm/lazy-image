@@ -272,21 +272,25 @@ function saveImageData(defer, data, imageDoc) {
 function loadImageToPath(defer, filename, filePath) {
   filePath = filePath || path.join(this.tmpDir, filename);
   var _id = filename.split('_')[0];
-  this.imageCollection.findOne({_id: _id}, {fields:{data: 1}}).then(
-    function(imageDoc) {
+  var deferred = this.imageCollection.findOne({_id: _id}, {fields:{data: 1}}).and(
+    function(innerDefer, imageDoc) {
       if (imageDoc) {
         fs.writeFile(filePath, imageDoc.data.buffer, function(err) {
           if (err) {
             var errMsg = ['Failed to load image', filename, 'to path', filePath];
-            defer.error(errMsg.join(' ') + '\n' + (err.stack || err));
+            (defer || innerDefer).error(errMsg.join(' ') + '\n' + (err.stack || err));
             return;
           }
-          defer.next(filename, filePath);
+          (defer || innerDefer).next(filename, filePath);
         });
       } else {
-        defer.error('Image not found');
+        (defer || innerDefer).error('Image not found');
       }
-    }).fail(defer.error);
+    });
+  if (defer) {
+    deferred.fail(defer.error);
+  }
+  return deferred;
 }
 
 /**
