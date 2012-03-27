@@ -3,6 +3,8 @@ var Path = require('path');
 var processer;
 var ImageProcesser = require('./processer').ImageProcesser;
 var connect = require('mongodb-async').connect;
+var crypto = genji.require('crypto');
+var sha1 = crypto.sha1;
 
 var defaultDBOptions = {
   dbName:'lazy_image_test',
@@ -37,7 +39,7 @@ exports.createImageServer = function (options, uploadURL) {
   app.get('^/process', processImage);
 
   // get an existing image
-  app.get('^/image/([0-9a-zA-Z]{40})\\.(jpg|png|gif)$', getImage);
+  app.get('^/image/([0-9a-zA-Z]{40})\\.(jpg|png|gif)', getImage);
   app.notFound('.*', function (handler) {
     handler.error(404, 'invalid end point');
     console.error(this.request.url);
@@ -60,6 +62,15 @@ exports.createImageServer = function (options, uploadURL) {
 };
 
 
+/**
+ * params:
+ *  url, url of image
+ *  width,
+ *  height,
+ *
+ *
+ *
+ */
 function processImage(handler) {
   var params = handler.params;
   var url = params.url;
@@ -108,10 +119,49 @@ function _getImage(filename, callback) {
     }).fail(callback);
 }
 
+function genImageHash(id, width, height, quality, key) {
+  return sha1([id, width, height, quality, key].join('_'));
+}
+
 function getImage(handler, filename) {
+  var params = handler.params;
+  var lazyProcess = false;
+  var origFilename = filename;
+  if (filename.length === 40 && params.hash && params.width && params.height) {
+    params.quality = params.quality || 100;
+    filename = [filename, params.quality, params.width + 'x' + params.height].join('_');
+    lazyProcess = params.hash === genImageHash(origFilename, params.width, params.height, params.quality, processer.privateKey);
+  }
   _getImage(filename, function (err, imageDoc) {
-    if (err || !imageDoc) {
+    if (err) {
       handler.error(404, 'Image not found');
+    } else if (!imageDoc) {
+      if (lazyProcess) {
+        // find the original image and resize
+        processer.imageCollection.findOne({_id:origFilename}).and(
+          function (defer, imageDoc) {
+            if (!imageDoc) {
+              handler.error(404, 'Image not found');
+            } else {
+              processer.resize(imageDoc, params, defer);
+            }
+          }).then(function (resizedDoc) {
+            _getImage(resizedDoc._id, function (err, imageDoc) {
+              if (err || !imageDoc) {
+                handler.error(404, 'Image not found');
+              } else {
+                var headers = {type:imageDoc.type};
+                handler.sendAsFile(imageDoc.data.value(), headers);
+              }
+            });
+          })
+          .fail(function (err) {
+            handler.error(404, 'Image not found');
+            console.error(err.stack || err);
+          });
+      } else {
+        handler.error(404, 'Image not found');
+      }
     } else {
       var headers = {type:imageDoc.type};
       handler.sendAsFile(imageDoc.data.value(), headers);

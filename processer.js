@@ -1,5 +1,4 @@
 var genji = require('genji').short();
-var db = genji.db;
 var extend = genji.extend;
 var Client = genji.require('client').Client;
 var crypto = genji.require('crypto');
@@ -53,6 +52,7 @@ function ImageProcesser(options, db) {
   }
   this.imageCollection = db.collection(options_.dbCollection);
   this.tmpDir = options_.tmpDir;
+  this.privateKey = options_.privateKey;
   var self = this;
   // ensure index
   process.nextTick(function() {
@@ -66,7 +66,8 @@ function ImageProcesser(options, db) {
     width: 1,
     height: 1,
     url: 1,
-    coarseLoc: 1
+    coarseLoc: 1,
+    created: 1
   };
 }
 
