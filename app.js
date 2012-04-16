@@ -266,3 +266,8 @@ ImageUploader.prototype = {
 };
 
 exports.ImageUploader = ImageUploader;
+
+process.on('uncaughtException', function(err) {
+  console.log('LazyImage error:');
+  console.log(err.stack || err);
+});
