@@ -249,7 +249,7 @@ ImageUploader.prototype = {
     var self = this;
     this.parseRequest(request, function (error, fields, files) {
       if (error || !Array.isArray(files)) {
-        callback('Can not parse file info from request.');
+        callback && callback('Can not parse file info from request.');
         console.error(error.stack || error);
       } else {
         var file = files[0];
@@ -258,9 +258,35 @@ ImageUploader.prototype = {
         self.processer.saveImageFileAndRemove(file.path, imageDoc).and(
           function (defer, resultImageDoc) {
             delete resultImageDoc.data;
-            callback(null, resultImageDoc);
+            callback && callback(null, resultImageDoc);
           }).fail(callback);
       }
+    });
+  },
+
+  saveRawImage:function (request, imageDoc, callback) {
+    var len = Number(request.headers['content-length']);
+    if (isNaN(len)) {
+      callback && callback('No content length');
+      return;
+    }
+    var buff = new Buffer(len);
+    var offset = 0;
+    var self = this;
+    request.on('data', function (chunk) {
+      if (Buffer.isBuffer(chunk)) {
+        chunk.copy(buff, offset, 0, chunk.length);
+        offset += chunk.length;
+      } else {
+        callback && callback('Only Buffer is allowed');
+        request.connection.destroy();
+      }
+    });
+    request.on('end', function () {
+      var imageDoc = {
+        type: request.headers['content-type']
+      };
+      self.processer.saveImageData(callback, buff, imageDoc);
     });
   }
 };

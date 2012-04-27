@@ -74,6 +74,7 @@ function ImageProcesser(options, db) {
 ImageProcesser.prototype = {
   saveImageFromUrl: saveImageFromUrl,
   saveImageFileAndRemove: saveImageFileAndRemove,
+  saveImageData: saveImageData,
   compress: compress,
   resize: resize,
   loadImageToPath: loadImageToPath,
@@ -213,9 +214,6 @@ function resize(imageDoc, options, outerDefer) {
 }
 
 
-/**
- * Private async operation functions
- */
 
 /**
  * 
@@ -224,6 +222,15 @@ function resize(imageDoc, options, outerDefer) {
  * @param options
  */
 function saveImageData(defer, data, imageDoc) {
+  if (typeof defer === 'function') {
+    var defer_ = defer;
+    defer = {
+      error: defer_,
+      next:function (doc) {
+        defer_(null, doc);
+      }
+    };
+  }
   if (!Buffer.isBuffer(data)) {
     defer.error('Only Buffer is allowed');
     return;
@@ -263,6 +270,11 @@ function saveImageData(defer, data, imageDoc) {
     }
   }).fail(defer.error);
 }
+
+/**
+ * Private async operation functions
+ */
+
 
 /**
  *
