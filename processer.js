@@ -54,6 +54,9 @@ function ImageProcesser(options, db) {
   this.tmpDir = options_.tmpDir;
   this.privateKey = options_.privateKey;
   this.denyOriginal = options_.denyOriginal;
+  this.watermarkPath = options_.watermarkPath;
+  this.autoWatermarkOnResize = options_.autoWatermarkOnResize;
+  this.minWatermarkImageWidth = options_.minWatermarkImageWidth || 460;
   var self = this;
   // ensure index
   process.nextTick(function() {
@@ -81,6 +84,7 @@ ImageProcesser.prototype = {
   loadImageToPath: loadImageToPath,
   compressImageAtPath: compressImageAtPath,
   resizeImageAtPath: resizeImageAtPath,
+  embedWatermarkAtPath: embedWatermarkAtPath,
   getCoarseLoc: function() {
     var date = new Date;
     var year = date.getUTCFullYear();
@@ -192,7 +196,7 @@ function resize(imageDoc, options, outerDefer) {
   var imageDoc_ = setImageDocOption(imageDoc, options);
   var filename = generateFilename(imageDoc_);
   var self = this;
-  this.imageCollection.findOne({filename: filename}, {fields: this.defaultFields})
+  var resized = this.imageCollection.findOne({filename: filename}, {fields: this.defaultFields})
     .and(function(defer, doc) {
       if (doc) {
         outerDefer.next(doc);
@@ -200,8 +204,21 @@ function resize(imageDoc, options, outerDefer) {
         var fileToLoad = options.quality === 100 ? imageDoc_._id : filename;
         loadImageToPath.call(self, defer, fileToLoad);
       }
-    })
-    .and(function(defer, filename, filePath) {
+    });
+
+  // embed watermark
+  if (this.autoWatermarkOnResize && this.watermarkPath && options.width > this.minWatermarkImageWidth) {
+    var watermarkPath = '"' + this.watermarkPath + '"';
+    resized.and(function (defer, filename, filePath) {
+      self.embedWatermarkAtPath(defer, filePath, watermarkPath, {
+        dissolve:80,
+        gravity:'center'
+      });
+    });
+  }
+
+  resized.and(function(defer, filename, filePath) {
+      filePath || (filePath = filename);
       self.resizeImageAtPath(defer, filePath, options.quality, options.width, options.height);
     })
     .and(function(defer, filePath) {
@@ -332,6 +349,16 @@ function resizeImageAtPath(defer, filePath, quality, width, height) {
       }
       defer.next(filePath);
     });
+}
+
+function embedWatermarkAtPath(defer, filePath, watermarkPath, watermarkOptions) {
+  var watermarkOptions_ = watermarkOptions || {};
+  var dissolve = watermarkOptions_.dissolve || 80;
+  var gravity = watermarkOptions_.gravity || 'center';
+  var gmComposite = ['gm composite -dissolve', dissolve, '-gravity', gravity, watermarkPath, filePath, filePath];
+  cmdExec(defer, gmComposite.join(' '), function() {
+    defer.next(filePath);
+  });
 }
 
 /**
