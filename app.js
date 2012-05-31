@@ -131,6 +131,12 @@ function getImage(handler, filename) {
     params.quality = params.quality || 100;
     filename = [filename, params.quality, params.width + 'x' + params.height].join('_');
     lazyProcess = params.hash === genImageHash(origFilename, params.width, params.height, params.quality, processer.privateKey);
+  } else {
+    // requesting original image file
+    if (processer.denyOriginal) {
+      handler.error(404, 'Image not found');
+      return;
+    }
   }
   _getImage(filename, function (err, imageDoc) {
     if (err) {

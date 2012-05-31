@@ -53,6 +53,7 @@ function ImageProcesser(options, db) {
   this.imageCollection = db.collection(options_.dbCollection);
   this.tmpDir = options_.tmpDir;
   this.privateKey = options_.privateKey;
+  this.denyOriginal = options_.denyOriginal;
   var self = this;
   // ensure index
   process.nextTick(function() {
