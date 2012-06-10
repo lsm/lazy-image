@@ -206,8 +206,11 @@ function resize(imageDoc, options, outerDefer) {
       }
     });
 
+  if (!options.hasOwnProperty('watermark') && this.autoWatermarkOnResize) {
+    options.watermark = '1';
+  }
   // embed watermark
-  if (this.autoWatermarkOnResize && this.watermarkPath && options.width > this.minWatermarkImageWidth) {
+  if (options.watermark === '1' && this.watermarkPath && options.width > this.minWatermarkImageWidth) {
     var watermarkPath = '"' + this.watermarkPath + '"';
     resized.and(function (defer, filename, filePath) {
       self.embedWatermarkAtPath(defer, filePath, watermarkPath, {
