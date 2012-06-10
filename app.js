@@ -8,6 +8,8 @@ var connect = require('mongodb-async').connect;
 var ImageProcesser = require('./processer').ImageProcesser;
 var IncomingForm = require('formidable').IncomingForm;
 var sha1 = genji.crypto.sha1;
+var BaseHandler = genji.handler.BaseHandler;
+var Path = require('path');
 
 
 var ImageUploadApp = App('ImageUploadApp', {
@@ -37,7 +39,7 @@ var ImageUploadApp = App('ImageUploadApp', {
   },
 
   isAllowedExt:function (filename) {
-    return this.exts.indexOf(Path.extname(filename)) > -1;
+    return this.exts.indexOf(Path.extname(filename.toLowerCase())) > -1;
   },
 
   parseRequest:function (request, callback) {
@@ -78,11 +80,11 @@ var ImageUploadApp = App('ImageUploadApp', {
   },
 
   saveImageFile:function (filePath, imageDoc) {
+    var self = this;
     this.app.processer
       .saveImageFileAndRemove(filePath, imageDoc)
       .and(function (defer, resultImageDoc) {
         delete resultImageDoc.data;
-        callback(null, resultImageDoc);
         self.emit('saveImageFile', null, resultImageDoc);
       }).fail(function (err) {
         self.emit('saveImageFile', err);
@@ -91,8 +93,9 @@ var ImageUploadApp = App('ImageUploadApp', {
 
   saveImageBlob:function (blob, imageDoc) {
     var self = this;
-    this.app.processer.saveImageData(function (err, imageDoc) {
-      self.emit('saveImageBlob', err, imageDoc);
+    this.app.processer.saveImageData(function (err, resultImageDoc) {
+      delete resultImageDoc.data;
+      self.emit('saveImageBlob', err, resultImageDoc);
     }, blob, imageDoc);
   },
 
@@ -110,7 +113,7 @@ var ImageUploadApp = App('ImageUploadApp', {
           self.app.saveImageFile.call(self, file.path, imageDoc);
         }
       });
-    }},
+    }, handlerClass: BaseHandler},
     uploadImageBlob:{method:'post', url:'/upload/image/blob', handleFunction:function (handler) {
       var request = handler.context.request;
       var len = Number(request.headers['content-length']);
@@ -136,7 +139,27 @@ var ImageUploadApp = App('ImageUploadApp', {
           self.app.saveImageBlob.call(self, buff, imageDoc);
         });
       }
-    }}
+    }, handlerClass: BaseHandler}
+  },
+
+  routeResults: {
+    saveImageFile:function (err, imageDoc) {
+      if (err) {
+        this.handler.error(500, 'upload failed');
+        console.error(err.stack || err);
+        return;
+      }
+      this.handler.sendJSON(imageDoc);
+    },
+
+    saveImageBlob:function (err, imageDoc) {
+      if (err) {
+        this.handler.error(500, 'upload failed');
+        console.error(err.stack || err);
+        return;
+      }
+      this.handler.sendJSON(imageDoc);
+    }
   }
 
 }, {
@@ -148,3 +171,5 @@ var ImageUploadApp = App('ImageUploadApp', {
     dbPoolSize:10
   }
 });
+
+exports.ImageUploadApp = ImageUploadApp;

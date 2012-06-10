@@ -274,6 +274,7 @@ function saveImageData(defer, data, imageDoc) {
     delete doc.url;
   }
   var self = this;
+  //@todo use `findAndModify`
   this.imageCollection.findOne({_id: doc._id}).then(function(oldDoc) {
     if (oldDoc) {
       defer.next(oldDoc);

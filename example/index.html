@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Image Upload App</title>
+</head>
+<body>
+
+<form id="uploadForm" method="post" enctype="multipart/form-data" action="{{uploadAction}}">
+  <p>Choose image file: <input id="imageField" type="file" name="fileselect[]" multipl
+                               e="multiple"/>
+  </p>
+</form>
+<label for="uploadFile">Upload as image file: </label>
+<input id="uploadFile" type="radio" value="file" name="uploadType" checked>
+<label for="uploadBlob">Upload as image blob: </label>
+<input id="uploadBlob" type="radio" value="blob" name="uploadType">
+
+<div id="previewWrap"></div>
+
+<script type="text/javascript" src="/jquery-1.7.1.min.js"></script>
+
+<script>
+
+  $(function () {
+    $('#imageField').bind('change', function (event) {
+      var files = event.target.files || event.dataTransfer.files;
+      $.each(files, function (idx, file) {
+        var imageFilter = /^(image\/bmp|image\/gif|image\/jpeg|image\/png|image\/tiff)$/i;
+        if (!imageFilter.test(file.type)) {
+          alert('Not a image file');
+          return;
+        }
+        var uploadType = 'file';
+        var uploadUrl = '/image/upload/image/file';
+        if ($('#uploadBlob').prop('checked')) {
+          uploadType = 'blob';
+          uploadUrl = '/image/upload/image/blob';
+        }
+
+        var fileReader = new FileReader();
+
+        fileReader.onload = function (e) {
+          var $previewDiv = $('<div class="image-preview"></div>');
+          var $img = $('<img/>');
+          $previewDiv.append($img);
+          $('#previewWrap').append($previewDiv);
+
+          var xhr = new XMLHttpRequest();
+          if (xhr.upload && file.size <= 1024 * 1024 * 10) {
+            // file received/failed
+            xhr.onreadystatechange = function (e) {
+              if (xhr.readyState == 4) {
+                if (xhr.status === 200) {
+                  var json = JSON.parse(e.currentTarget.responseText);
+                  $img.attr('src', json.imageUrl);
+                  $img.attr('id', json.imageId);
+                  $img.attr('title', json.imageId);
+                } else {
+                  alert('Upload failed.');
+                }
+              }
+            };
+
+            // start upload
+            xhr.open("POST", uploadUrl, true);
+            xhr.setRequestHeader("X-FILENAME", file.name);
+            xhr.send(uploadType === 'file' ? new FormData(document.getElementById('uploadForm')) : file);
+          } else {
+            alert(file.size <= 1024 * 1024 * 10 ? 'Please use chrome/firefox4+' : 'Image too big');
+          }
+        };
+
+        fileReader.readAsDataURL(file);
+      });
+    });
+  });
+</script>
+
+</body>
+</html>
