@@ -41,7 +41,7 @@
 
         fileReader.onload = function (e) {
           var $previewDiv = $('<div class="image-preview"></div>');
-          var $img = $('<img/>');
+          var $img = $('<img width="180px"/>');
           $previewDiv.append($img);
           $('#previewWrap').append($previewDiv);
 
@@ -52,9 +52,10 @@
               if (xhr.readyState == 4) {
                 if (xhr.status === 200) {
                   var json = JSON.parse(e.currentTarget.responseText);
-                  $img.attr('src', json.imageUrl);
-                  $img.attr('id', json.imageId);
-                  $img.attr('title', json.imageId);
+                  var imageUrl = '/image/get/' + json._id + '.jpg';
+                  $img.attr('src', imageUrl);
+                  $img.attr('id', json._id);
+                  $img.attr('title', json._id);
                 } else {
                   alert('Upload failed.');
                 }
