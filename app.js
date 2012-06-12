@@ -328,6 +328,7 @@ function generateImageHash(options, key) {
   if (!options.hasOwnProperty('watermark')) {
     options.watermark = '0';
   }
+  options.quality = options.quality || '100';
   return sha1([options.id, options.width, options.height, options.quality, options.watermark, key].join('_'));
 }
 
@@ -340,7 +341,18 @@ function generateImageFilename(id, options) {
   return filename.join('_');
 }
 
+function generateImageThumbUrl(options, key) {
+  options.quality = options.quality || '100';
+  var hash = generateImageHash(options, key);
+  var ext = options.ext || '.jpg';
+  var imgSrc = options.id + ext + '?quality=' + opyions.quality;
+  imgSrc += '&width=' + width + '&height=' + height;
+  imgSrc += '&hash=' + hash;
+  return imgSrc;
+}
+
 exports.ImageUploadApp = ImageUploadApp;
 exports.ImageProcessApp = ImageProcessApp;
 exports.generateImageFilename = generateImageFilename;
 exports.generateImageHash = generateImageHash;
+exports.generateImageThumbUrl = generateImageThumbUrl;
