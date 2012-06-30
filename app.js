@@ -79,10 +79,10 @@ var ImageUploadApp = App('ImageUploadApp', {
     form.parse(request);
   },
 
-  saveImageFile:function (filePath, imageDoc) {
+  saveImageFile:function (filePath, imageDoc, unlink) {
     var self = this;
-    this.app.processer
-      .saveImageFileAndRemove(filePath, imageDoc)
+    this.processer
+      .saveImageFile(filePath, imageDoc, typeof unlink === 'undefined' ? true : unlink)
       .and(function (defer, resultImageDoc) {
         delete resultImageDoc.data;
         self.emit('saveImageFile', null, resultImageDoc);
@@ -93,10 +93,16 @@ var ImageUploadApp = App('ImageUploadApp', {
 
   saveImageBlob:function (blob, imageDoc) {
     var self = this;
-    this.app.processer.saveImageData(function (err, resultImageDoc) {
-      delete resultImageDoc.data;
-      self.emit('saveImageBlob', err, resultImageDoc);
-    }, blob, imageDoc);
+    imageDoc.data = blob;
+    return this.processer
+      .saveImageDoc(imageDoc)
+      .then(function (resultImageDoc) {
+        delete resultImageDoc.data;
+        self.emit('saveImageBlob', null, resultImageDoc);
+      })
+      .fail(function (err) {
+        self.emit('saveImageBlob', err);
+      });
   },
 
   routes:{

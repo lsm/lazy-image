@@ -15,7 +15,8 @@
     "genji": "https://github.com/zir/genji/tarball/0.5",
     "mongodb-async": "~0.2.0",
     "request": "2.9.3",
-    "formidable": "1.0.x"
+    "formidable": "1.0.x",
+    "dateformat": "1.x"
   },
   "engines": {
     "node": ">= 0.4.8"
