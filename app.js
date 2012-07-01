@@ -81,7 +81,7 @@ var ImageUploadApp = App('ImageUploadApp', {
 
   saveImageFile:function (filePath, imageDoc, unlink) {
     var self = this;
-    this.processer
+    this.app.processer
       .saveImageFile(filePath, imageDoc, typeof unlink === 'undefined' ? true : unlink)
       .and(function (defer, resultImageDoc) {
         delete resultImageDoc.data;
@@ -94,7 +94,7 @@ var ImageUploadApp = App('ImageUploadApp', {
   saveImageBlob:function (blob, imageDoc) {
     var self = this;
     imageDoc.data = blob;
-    return this.processer
+    this.app.processer
       .saveImageDoc(imageDoc)
       .then(function (resultImageDoc) {
         delete resultImageDoc.data;
@@ -193,68 +193,72 @@ var ImageProcessApp = App('ImageProcessApp', {
       });
   },
 
-  getImageDoc:function (query, callback) {
+  getImageDoc:function (query) {
     var queryDoc;
     if (typeof query === 'string') {
       queryDoc = query.length === 40 ? {_id:query} : {filename:query};
     } else {
       queryDoc = query;
     }
-    this.processer.imageCollection
-      .findOne(queryDoc)
-      .then(
-      function (imageDoc) {
-        callback(null, imageDoc);
-      }).fail(callback);
+    var self = this;
+    this.app.processer
+      .imageCollection.findOne(queryDoc)
+      .then(function (imageDoc) {
+        self.emit('getImageDoc', null, imageDoc);
+      })
+      .fail(function (err) {
+        self.emit('getImageDoc', err);
+      });
   },
 
-  getImage:function (filename, options) {
+  getImageById:function (date, imageId, options) {
     var lazyProcess = false;
     var processer = this.app.processer;
-    var origFilename = filename;
-    if (filename.length === 40 && options.hash && options.width && options.height) {
-      options.id = filename;
+    var origFilename = imageId;
+    if (imageId.length === 40 && options.hash && options.width && options.height) {
+      options.id = imageId;
       lazyProcess = options.hash === generateImageHash(options, processer.privateKey);
-      filename = generateImageFilename(filename, options);
+      imageId = generateImageFilename(imageId, options);
     } else {
       // requesting original image file
       if (processer.denyOriginal) {
-        this.emit('getImage', 'Image not found');
+        this.emit('getImageById', 'Image not found');
         return;
       }
     }
     var self = this;
-    this.app.getImageDoc(filename, function (err, imageDoc) {
-      if (err) {
-        self.emit('getImage', err);
-      } else if (imageDoc) {
+    var queryDoc = imageId.length === 40 ? {_id:imageId} : {filename:imageId};
+    queryDoc.date = date;
+    this.app.processer
+      .imageCollection.findOne(queryDoc).then(function (imageDoc) {
+      if (imageDoc) {
         imageDoc.data = imageDoc.data.value();
-        self.emit('getImage', null, imageDoc);
+        self.emit('getImageById', null, imageDoc);
       } else {
         if (lazyProcess) {
           // find the original image and resize
           processer.imageCollection.findOne({_id:origFilename}).and(
             function (defer, imageDoc) {
               if (!imageDoc) {
-                self.emit('getImage', 'Image not found');
+                self.emit('getImageById', 'Image not found');
               } else {
                 processer.resize(imageDoc, options, defer);
               }
             }).then(function (resizedDoc) {
               self.app.getImageDoc(resizedDoc._id, function (err, imageDoc) {
                 if (err || !imageDoc) {
-                  self.emit('getImage', 'Image not found');
+                  self.emit('getImageById', 'Image not found');
                 } else {
                   imageDoc.data = imageDoc.data.value();
-                  self.emit('getImage', null, imageDoc);
+                  self.emit('getImageById', null, imageDoc);
                 }
               });
             })
             .fail(function (err) {
-              self.emit('getImage', err);
+              self.emit('getImageById', err);
             });
         } else {
-          self.emit('getImage', 'Image not found');
+          self.emit('getImageById', 'Image not found for id ' + imageId + ' in date ' + date);
         }
       }
     });
@@ -300,16 +304,16 @@ var ImageProcessApp = App('ImageProcessApp', {
   },
 
   routes:{
-    getImage:{method:'get', url:'/get/([0-9a-zA-Z]{40})\\.(?:jpg|png|gif)'},
+    getImageById:{method:'get', url:'/([0-9]{8})/id/([0-9a-zA-Z]{40})\\.(?:jpg|png|gif)'},
     processImage:{method: 'get', url: '/process'},
     notFound:{method: 'notFound', url: '^/*', handleFunction:function (handler) {
       handler.error(404, 'invalid endpoint');
-      console.error('Invalid endpoint: ' + this.request.url);
+      console.log('Invalid endpoint: ' + handler.context.request.url);
     }}
   },
 
   routeResults:{
-    getImage:function (err, imageDoc) {
+    getImageById:function (err, imageDoc) {
       if (err || !imageDoc) {
         this.handler.error(404, 'Image not found');
         console.error(err.stack || err);

@@ -1,4 +1,4 @@
-var genji = require('genji').short();
+var genji = require('genji');
 var extend = genji.extend;
 var Client = genji.client.Client;
 var sha1 = genji.crypto.sha1;
