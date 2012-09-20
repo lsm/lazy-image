@@ -32,9 +32,11 @@ var ImageModel = Model('ImageModel', {
     id: 'string',
     // '20120618' image creation date string, can be used as first sharding key (coarse location key)
     date: 'string',
-    // user specified filename, default is (hash-of-original-file)_(quality)_(widthxheight)_(watermark)
+    // generated filename: $hash_$date
     // could be used as second sharding key (search key)
     filename: 'string',
+    // original filename
+    name: 'string',
     // image blob
     data:function (value) {
       return !Buffer.isBuffer(value);
@@ -52,21 +54,17 @@ var ImageModel = Model('ImageModel', {
     // image height in px (optional)
     height: 'number',
     // '1' if image has watermark, else omit this field, optional
-    watermark: '1',
+    watermark: 'string',
     // date created
     created: 'date'
   },
 
-  init:function (data) {
-    if (!data._id) {
-      if (!data.date) {
-        this.attr('date', dateformat(new Date, "yyyymmdd"));
-      }
-      this.attr('created', new Date);
-      if (!data.quality) {
-        this.attr('quality', 100);
-      }
-    }
+  init: function (data) {
+    !data.date && this.attr('date', dateformat(new Date, "yyyymmdd"));
+    !data.created && this.attr('created', new Date);
+    !data.quality && this.attr('quality', 100);
+    !data.filename && this.attr('filename', this.attr('filename'));
+    !data.hasOwnProperty('watermark') && this.attr('watermark', '0');
   },
 
   setData:function (value) {
@@ -74,26 +72,30 @@ var ImageModel = Model('ImageModel', {
     return value;
   },
 
-  getFilename:function (value) {
-    var filename = this.attr('id');
-    if (value) {
-      filename = value + '_' + filename;
-    };
-    var quality = this.attr('quality');
-    if (quality) {
-      filename += '_' + quality;
-    }
+  getFilename:function () {
+    var filenameHash = {id: this.attr('id')};
+    filenameHash.quality = this.attr('quality') || 100;
     var size = this.attr(['width', 'height']);
-    if (size.width && size.height) {
-      filename += '_' + size.width + 'x' + size.height;
-    }
-    var watermark = this.attr('watermark');
-    if (watermark) {
-      filename += '_wm';
-    }
+    filenameHash.width = size.width || 0;
+    filenameHash.height = size.height || 0;
+    filenameHash.watermark = this.attr('watermark') || 0;
+    var filename = sha1(JSON.stringify(filenameHash));
+    filename += '_' + this.attr('date');
     return filename;
   }
 
 });
 
 exports.ImageModel = ImageModel;
+
+//var i = {
+//  id: sha1('1'),
+//  name: 'test.jpg',
+//  date: '20120918',
+//  width: 120,
+//  height: 210
+//};
+//var im = new ImageModel(i);
+//
+//console.log(im.toDoc());
+//console.log(im.toData());

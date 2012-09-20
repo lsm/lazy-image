@@ -6,39 +6,12 @@ var path = require('path');
 var mongodbAsync = require('mongodb-async');
 var connect = mongodbAsync.connect;
 var Binary = mongodbAsync.mongodb.BSONPure.Binary;
-
 var exec = require('child_process').exec;
 var fs = require('fs');
 var readFile = genji.defer(fs.readFile, fs);
 var gm = require('gm');
-
 var model = require('./model');
 var ImageModel = model.ImageModel;
-
-
-/**
- * Image collection:
- *
- * {
- *   _id: '441547af33d49c4f37461fa87a5bb502b40687f2', // sha1 hash of the file content
- *   filename: '441547af33d49c4f37461fa87a5bb502b40687f2_100_200x300', // filename
- *   coarseLoc: '20120618', // the first sharding key, default is the date when the image is created
- *   data: '', // image binary data
- *   type: 'image/jpeg', // mime type
- *   length: 77031, // binary length of image
- *   created: ISODate("2011-08-27T17:45:29.976Z"), // date created
- *   url: 'http://p0.meituan.net/deal/201108/24/shotu1.jpg', // url of oringinal image (optional)
- *   quality: 100, // image quality (optional),
- *   width: 200, // image width in px (optional)
- *   height: 300 // image height in px (optional)
- * }
- *
- * filename: (hash-of-original-file)_(quality)_(widthxheight)
- * Quality 100 not resized (lossless compressed): 441547af33d49c4f37461fa87a5bb502b40687f2_100
- * Quality 70, resized 200x300: 441547af33d49c4f37461fa87a5bb502b40687f2_70_200x300
- *
- */
-
 
 /**
  *
@@ -52,7 +25,7 @@ function ImageProcesser(options, db) {
     db = connect(options_.dbHost, options_.dbPort, {poolSize:options_.dbPoolSize}).db(options_.dbName, {});
   }
   this.imageCollection = db.collection(options_.dbCollection);
-  this.tmpDir = options_.tmpDir;
+  this.tmpDir = options_.tmpDir || '/tmp';
   this.privateKey = options_.privateKey;
   this.denyOriginal = options_.denyOriginal;
   this.watermarkPath = options_.watermarkPath;
@@ -79,22 +52,23 @@ function ImageProcesser(options, db) {
 
 ImageProcesser.prototype = {
   /**
-   *
-   * @param {Object} imageDoc
-   * @param options
+   * Save an image model into database
+   * @param {ImageModel} imageModel
    * @return {Deferrable}
    */
-  saveImageDoc:function (imageDoc) {
-    var imageModel = new ImageModel(imageDoc);
+  saveImageModel:function (imageModel) {
+    if(!imageModel instanceof ImageModel || !imageModel.isValid()) {
+      return false;
+    }
     var imageDoc_ = imageModel.toDoc();
-    imageDoc_.data = new Binary(imageDoc_.data);
-    imageDoc.length = imageDoc_.data.length();
     var self = this;
-    return this.imageCollection.findOne({_id:imageDoc_._id})
-      .and(function (defer, oldDoc) {
-        if (oldDoc) {
+    return this.imageCollection.findOne({_id:imageDoc_._id}, {_id: 1})
+      .and(function (defer, existedImage) {
+        if (existedImage) {
           return true;
         } else {
+          imageDoc_.data = new Binary(imageDoc_.data);
+          imageDoc.length = imageDoc_.data.length();
           self.imageCollection
             .insert(imageDoc_, {safe:true})
             .fail(defer.error)
@@ -116,6 +90,7 @@ ImageProcesser.prototype = {
    * @return {Deferrable}
    */
   saveImageFromUrl:function (url) {
+    throw new Error('under development');
     var imageType = typeOfImage(url);
     var self = this;
     var urlHash = sha1(url);
@@ -135,7 +110,7 @@ ImageProcesser.prototype = {
               url:url
             });
             if (imageModel.isValid()) {
-              self.saveImageDoc(imageModel.toDoc()).then(defer.next).fail(defer.error);
+              self.saveImageModel(imageModel.toDoc()).then(defer.next).fail(defer.error);
             } else {
               defer.error(imageModel.getInvalidFields());
             }
@@ -157,13 +132,32 @@ ImageProcesser.prototype = {
     imageDoc = imageDoc || {};
     return readFile(filePath)
       .and(function (defer, data) {
-        imageDoc.data = data;
-        var imageModel = new ImageModel(imageDoc);
-        if (imageModel.isValid()) {
-          self.saveImageDoc(imageModel.toDoc()).then(defer.next).fail(defer.error);
-        } else {
-          defer.error(imageModel.getInvalidFields());
-        }
+        gm(filePath).identify(function (err, info) {
+          if (err) {
+            defer.error(err);
+            return;
+          }
+          if (info) {
+            if (info.size) {
+              imageDoc.width = info.size.width;
+              imageDoc.height = info.size.height;
+            }
+            var type = info.type || info.Type;
+            type = type.toLowerCase();
+            type = type === 'jpeg' ? 'jpg' : type;
+            imageDoc.type = type;
+            imageDoc.meta = info;
+            imageDoc.data = data;
+            var imageModel = new ImageModel(imageDoc);
+            if (imageModel.isValid()) {
+              self.saveImageModel(imageModel).then(defer.next).fail(defer.error);
+            } else {
+              defer.error(imageModel.getInvalidFields());
+            }
+          } else {
+            defer.error('Error: GM can not get image info');
+          }
+        });
       }).and(function (defer, imageDoc) {
         if (!unlink) return true;
         fs.unlink(filePath, function (err) {
@@ -232,12 +226,13 @@ ImageProcesser.prototype = {
    * @param outerDefer
    * @return {Deferrable}
    */
-  resize: function (imageDoc) {
+  resize: function (imageDoc, options) {
     var self = this;
     var queryDoc = {
       date: imageDoc.date,
       filename: imageDoc.filename
     };
+    console.log(queryDoc);
     var resized = this.imageCollection.findOne(queryDoc, {fields:this.defaultFields})
       .and(function (defer, imageFound) {
         if (imageFound) {
@@ -247,11 +242,11 @@ ImageProcesser.prototype = {
         }
       });
 
-    if (!imageDoc.hasOwnProperty('watermark') && this.autoWatermarkOnResize) {
-      imageDoc.watermark = '1';
+    if (!options.hasOwnProperty('watermark') && this.autoWatermarkOnResize) {
+      options.watermark = '1';
     }
     // embed watermark
-    if (imageDoc.watermark === '1' && this.watermarkPath && imageDoc.width > this.minWatermarkImageWidth) {
+    if (options.watermark === '1' && this.watermarkPath && options.width > this.minWatermarkImageWidth) {
       var watermarkPath = '"' + this.watermarkPath + '"';
       resized.and(function (defer, imageDoc, filePath) {
         if (!filePath) return true;
@@ -264,12 +259,17 @@ ImageProcesser.prototype = {
 
     resized.and(function (defer, imageDoc, filePath) {
         if (!filePath) return true;
-        self.resizeImageAtPath(filePath, imageDoc.quality, imageDoc.width, imageDoc.height, function (err, filePath) {
-          defer.next(err, imageDoc, filePath);
+        self.resizeImageAtPath(filePath, options.quality, options.width, options.height, function (err, filePath) {
+          console.log(4);
+          console.log(filePath);
+          err ? defer.error(err) : defer.next(imageDoc, filePath);
         });
       })
       .and(function (defer, imageDoc, filePath) {
         if (!filePath) return true;
+        console.log(5);
+        console.log(imageDoc);
+        console.log(filePath);
         self.saveImageFileAndRemove(filePath, imageDoc).then(defer.next).fail(defer.error);
       })
       .and(function (defer, resizedImageDoc) {
@@ -298,6 +298,7 @@ ImageProcesser.prototype = {
               var errMsg = ['Failed to load image', imageDoc._id, 'to path', filePath];
               defer.error(errMsg.join(' ') + '\n' + (err.stack || err));
             } else {
+              console.log(2);
               defer.next(imageDoc, filePath);
             }
           });
@@ -320,6 +321,10 @@ ImageProcesser.prototype = {
   },
 
   resizeImageAtPath:function (filePath, quality, width, height, callback) {
+    if (!height || Number(height) === 0) {
+      height = undefined;
+    }
+    console.log(arguments);
     gm(filePath)
       .resize(width, height)
       .noProfile()

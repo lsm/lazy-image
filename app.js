@@ -95,7 +95,7 @@ var ImageUploadApp = App('ImageUploadApp', {
     var self = this;
     imageDoc.data = blob;
     this.app.processer
-      .saveImageDoc(imageDoc)
+      .saveImageModel(imageDoc)
       .then(function (resultImageDoc) {
         delete resultImageDoc.data;
         self.emit('saveImageBlob', null, resultImageDoc);
@@ -211,13 +211,13 @@ var ImageProcessApp = App('ImageProcessApp', {
       });
   },
 
-  getImageById:function (date, imageId, options) {
+  getImageByDateId:function (date, imageId, options) {
     var lazyProcess = false;
     var processer = this.app.processer;
     var origFilename = imageId;
-    if (imageId.length === 40 && options.hash && options.width && options.height) {
+    if (imageId.length === 40 && options.hash && (options.width || options.height)) {
       options.id = imageId;
-      lazyProcess = options.hash === generateImageHash(options, processer.privateKey);
+      lazyProcess = isValidHash(options.hash, options, processer.privateKey);
       imageId = generateImageFilename(imageId, options);
     } else {
       // requesting original image file
@@ -228,7 +228,7 @@ var ImageProcessApp = App('ImageProcessApp', {
     }
     var self = this;
     var queryDoc = imageId.length === 40 ? {_id:imageId} : {filename:imageId};
-    queryDoc.date = date;
+    date && (queryDoc.date = date);
     this.app.processer
       .imageCollection.findOne(queryDoc).then(function (imageDoc) {
       if (imageDoc) {
@@ -242,9 +242,11 @@ var ImageProcessApp = App('ImageProcessApp', {
               if (!imageDoc) {
                 self.emit('getImageById', 'Image not found');
               } else {
-                processer.resize(imageDoc, options, defer);
+                imageDoc.filename = imageId;
+                processer.resize(imageDoc, options).then(defer.next).fail(defer.error);
               }
             }).then(function (resizedDoc) {
+              console.log(resizedDoc);
               self.app.getImageDoc(resizedDoc._id, function (err, imageDoc) {
                 if (err || !imageDoc) {
                   self.emit('getImageById', 'Image not found');
@@ -258,10 +260,14 @@ var ImageProcessApp = App('ImageProcessApp', {
               self.emit('getImageById', err);
             });
         } else {
-          self.emit('getImageById', 'Image not found for id ' + imageId + ' in date ' + date);
+          self.emit('getImageById', 'Image not found for id ' + imageId + ' in date ' + (date || ''));
         }
       }
     });
+  },
+
+  getImageById: function (imageId, options) {
+    ImageProcessApp.prototype.getImageByDateId.call(this, null, imageId, options);
   },
 
   processImage: function(options) {
@@ -304,7 +310,8 @@ var ImageProcessApp = App('ImageProcessApp', {
   },
 
   routes:{
-    getImageById:{method:'get', url:'/([0-9]{8})/id/([0-9a-zA-Z]{40})\\.(?:jpg|png|gif)'},
+    getImageByDateId:{method:'get', url:'/([0-9]{8})/id/([0-9a-zA-Z]{40})\\.(?:jpg|png|gif)'},
+    getImageById:{method:'get', url:'/([0-9a-zA-Z]{40})\\.(?:jpg|png|gif)'},
     processImage:{method: 'get', url: '/process'},
     notFound:{method: 'notFound', url: '^/*', handleFunction:function (handler) {
       handler.error(404, 'invalid endpoint');
@@ -339,11 +346,12 @@ function generateImageHash(options, key) {
     options.watermark = '0';
   }
   options.quality = options.quality || '100';
+  options.height = options.height || 0;
   return sha1([options.id, options.width, options.height, options.quality, options.watermark, key].join('_'));
 }
 
 function generateImageFilename(id, options) {
-  options.quality = options.quality || 100;
+  options.quality = options.quality || '100';
   var filename = [id, options.quality, options.width + 'x' + options.height];
   if (options.watermark === '1') {
     filename.push('watermarked');
@@ -355,14 +363,18 @@ function generateImageThumbUrl(options, key) {
   options.quality = options.quality || '100';
   var hash = generateImageHash(options, key);
   var ext = options.ext || '.jpg';
-  var imgSrc = options.id + ext + '?quality=' + opyions.quality;
-  imgSrc += '&width=' + width + '&height=' + height;
+  var imgSrc = options.id + ext + '?quality=' + options.quality;
+  imgSrc += '&width=' + options.width + '&height=' + options.height;
   imgSrc += '&hash=' + hash;
   return imgSrc;
 }
 
+function isValidHash(hash, options, key) {
+  return hash === generateImageHash(options, key);
+}
+
 exports.ImageUploadApp = ImageUploadApp;
 exports.ImageProcessApp = ImageProcessApp;
-exports.generateImageFilename = generateImageFilename;
 exports.generateImageHash = generateImageHash;
 exports.generateImageThumbUrl = generateImageThumbUrl;
+exports.isValidHash = isValidHash;
