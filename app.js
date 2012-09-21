@@ -138,13 +138,14 @@ var ImageUploadApp = App('ImageUploadApp', {
       if (isNaN(len)) {
         this.emit('saveImageBlob', "header has no content length");
       } else {
-        var seed = [process.pid, len, name, (new Date).getTime()].join('-');
-        var tmpPath = Path.join(this.app.processer.tmpDir, sha1(seed));
-        var wStream = fs.createWriteStream(tmpPath);
-        request.pipe(wStream);
         var self = this;
-        request.on('end', function () {
-          self.app.saveImageFile.call(self, tmpPath, {length: len, name: name}, true);
+        this.app.processer.saveImageStream({data:request, length: len, name: name}, function (err, doc) {
+          if (err) {
+            self.emit('saveImageBlob', err);
+            return;
+          }
+          delete doc.data;
+          self.emit('saveImageBlob', null, doc);
         });
       }
     }, handlerClass:BaseHandler}

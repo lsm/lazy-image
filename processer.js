@@ -94,6 +94,49 @@ ImageProcesser.prototype = {
     return false;
   },
 
+  saveImageStream: function (imageDoc, callback) {
+    var stream = imageDoc.data;
+    if (stream instanceof Stream && !isNaN(imageDoc.length)) {
+      var self = this;
+      gm(stream).identify({bufferStream: true}, function (err, info) {
+        if (err) {
+          callback(err);
+          return;
+        }
+        if (info && info.size) {
+          imageDoc.width = info.size.width;
+          imageDoc.height = info.size.height;
+          var type = info.type || info.Type;
+          type = type.toLowerCase();
+          type = type === 'jpeg' || /JPEG/.test(info.format) ? 'jpg' : type;
+          imageDoc.type = type;
+          imageDoc.meta = info;
+
+          var buffer = new Buffer(imageDoc.length);
+          var offset = 0;
+
+          stream.on('data', function (chunk) {
+            chunk.copy(buffer, offset, 0, chunk.length);
+            offset += chunk.length;
+          });
+
+          stream.on('end', function () {
+            imageDoc.data = buffer;
+            self.saveImageDoc(imageDoc).then(function (doc) {
+              callback(null, doc);
+            }).fail(function (err) {
+              callback(err);
+            });
+          });
+          this.buffer.resume();
+        } else {
+          callback('Error: GM can not get image info');
+        }
+      });
+    }
+    return false;
+  },
+
   /**
    * Grab and save a image to db
    *
