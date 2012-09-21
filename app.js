@@ -249,7 +249,6 @@ var ImageProcessApp = App('ImageProcessApp', {
                 processer.resize(imageDoc, options).then(defer.next).fail(defer.error);
               }
             }).then(function (resizedDoc) {
-              console.log(resizedDoc);
               self.app.getImageDoc(resizedDoc._id, function (err, imageDoc) {
                 if (err || !imageDoc) {
                   self.emit('getImageById', 'Image not found');
