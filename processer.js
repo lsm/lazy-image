@@ -68,7 +68,7 @@ ImageProcesser.prototype = {
           return true;
         } else {
           imageDoc_.data = new Binary(imageDoc_.data);
-          imageDoc.length = imageDoc_.data.length();
+          imageDoc_.length = imageDoc_.data.length();
           self.imageCollection
             .insert(imageDoc_, {safe:true})
             .fail(defer.error)
