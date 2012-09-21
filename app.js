@@ -10,6 +10,8 @@ var IncomingForm = require('formidable').IncomingForm;
 var sha1 = genji.crypto.sha1;
 var BaseHandler = genji.handler.BaseHandler;
 var Path = require('path');
+var model = require('./model');
+var ImageModel = model.ImageModel;
 
 
 var ImageUploadApp = App('ImageUploadApp', {
@@ -94,8 +96,9 @@ var ImageUploadApp = App('ImageUploadApp', {
   saveImageBlob:function (blob, imageDoc) {
     var self = this;
     imageDoc.data = blob;
+    var imageModel = new ImageModel(imageDoc);
     this.app.processer
-      .saveImageModel(imageDoc)
+      .saveImageModel(imageModel)
       .then(function (resultImageDoc) {
         delete resultImageDoc.data;
         self.emit('saveImageBlob', null, resultImageDoc);
