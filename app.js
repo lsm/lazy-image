@@ -12,6 +12,7 @@ var BaseHandler = genji.handler.BaseHandler;
 var Path = require('path');
 var model = require('./model');
 var ImageModel = model.ImageModel;
+var fs = require('fs');
 
 
 var ImageUploadApp = App('ImageUploadApp', {
@@ -93,19 +94,25 @@ var ImageUploadApp = App('ImageUploadApp', {
       });
   },
 
-  saveImageBlob:function (blob, imageDoc) {
+  /**
+   *
+   * @param {Buffer} buffer
+   * @param imageDoc
+   */
+  saveImageBlob:function (buffer, imageDoc) {
     var self = this;
-    imageDoc.data = blob;
-    var imageModel = new ImageModel(imageDoc);
-    this.app.processer
-      .saveImageModel(imageModel)
-      .then(function (resultImageDoc) {
-        delete resultImageDoc.data;
-        self.emit('saveImageBlob', null, resultImageDoc);
-      })
-      .fail(function (err) {
-        self.emit('saveImageBlob', err);
-      });
+    imageDoc.data = buffer;
+    if (buffer instanceof Buffer) {
+      this.app.processer.saveImageDoc(imageDoc)
+        .then(function (resultImageDoc) {
+          delete resultImageDoc.data;
+          self.emit('saveImageBlob', null, resultImageDoc);
+        }).fail(function (err) {
+          self.emit('saveImageBlob', err);
+        });
+    } else {
+      this.emit('saveImageBlob', 'Only support Buffer.');
+    }
   },
 
   routes:{
@@ -123,29 +130,21 @@ var ImageUploadApp = App('ImageUploadApp', {
         }
       });
     }, handlerClass:BaseHandler},
+
     uploadImageBlob:{method:'post', url:'/upload/image/blob', handleFunction:function (handler) {
       var request = handler.context.request;
       var len = Number(request.headers['content-length']);
+      var name = request.headers['x-filename'];
       if (isNaN(len)) {
         this.emit('saveImageBlob', "header has no content length");
       } else {
-        var buff = new Buffer(len);
-        var offset = 0;
+        var seed = [process.pid, len, name, (new Date).getTime()].join('-');
+        var tmpPath = Path.join(this.app.processer.tmpDir, sha1(seed));
+        var wStream = fs.createWriteStream(tmpPath);
+        request.pipe(wStream);
         var self = this;
-        request.on('data', function (chunk) {
-          if (Buffer.isBuffer(chunk)) {
-            chunk.copy(buff, offset, 0, chunk.length);
-            offset += chunk.length;
-          } else {
-            self.emit('saveImageBlob', "Only Buffer is allowed");
-            request.connection.destroy();
-          }
-        });
         request.on('end', function () {
-          var imageDoc = {
-            type:request.headers['content-type']
-          };
-          self.app.saveImageBlob.call(self, buff, imageDoc);
+          self.app.saveImageFile.call(self, tmpPath, {length: len, name: name}, true);
         });
       }
     }, handlerClass:BaseHandler}

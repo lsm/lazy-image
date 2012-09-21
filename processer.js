@@ -12,6 +12,7 @@ var readFile = genji.defer(fs.readFile, fs);
 var gm = require('gm');
 var model = require('./model');
 var ImageModel = model.ImageModel;
+var Stream = require('stream');
 
 /**
  *
@@ -25,7 +26,7 @@ function ImageProcesser(options, db) {
     db = connect(options_.dbHost, options_.dbPort, {poolSize:options_.dbPoolSize}).db(options_.dbName, {});
   }
   this.imageCollection = db.collection(options_.dbCollection);
-  this.tmpDir = options_.tmpDir || '/tmp';
+  this.tmpDir = options_.tmpDir;
   this.privateKey = options_.privateKey;
   this.denyOriginal = options_.denyOriginal;
   this.watermarkPath = options_.watermarkPath;
@@ -52,35 +53,45 @@ function ImageProcesser(options, db) {
 
 ImageProcesser.prototype = {
   /**
-   * Save an image model into database
-   * @param {ImageModel} imageModel
+   * Save an image doc into database
+   * @param {Object} imageDoc
    * @return {Deferrable}
    */
-  saveImageModel:function (imageModel) {
-    if(!imageModel instanceof ImageModel || !imageModel.isValid()) {
-      return false;
-    }
-    var imageDoc_ = imageModel.toDoc();
+  saveImageDoc:function (imageDoc) {
     var self = this;
-    return this.imageCollection.findOne({_id:imageDoc_._id}, {_id: 1})
-      .and(function (defer, existedImage) {
-        if (existedImage) {
-          return true;
-        } else {
-          imageDoc_.data = new Binary(imageDoc_.data);
-          imageDoc_.length = imageDoc_.data.length();
-          self.imageCollection
-            .insert(imageDoc_, {safe:true})
-            .fail(defer.error)
-            .then(function (inserted) {
-              if (inserted) {
-                defer.next(inserted[0]);
-              } else {
-                defer.error('Failed to save image doc.');
+    if (imageDoc.data instanceof Buffer) {
+      var id = sha1(imageDoc.data);
+      return self.imageCollection.findOne({_id: id}, {_id: 1})
+        .and(function (defer, existedImage) {
+          if (existedImage) {
+            return true;
+          } else {
+            var imageModel = new ImageModel(imageDoc);
+            if (imageModel.isValid()) {
+              var imageDoc_ = ImageModel.toDoc(imageDoc);
+              if (!imageDoc_.width || !imageDoc_.height) {
+                defer.error('Missing width/height info of image.');
+                return;
               }
-            });
-        }
-      });
+              imageDoc_.data = new Binary(imageDoc_.data);
+              imageDoc_.length = imageDoc_.data.length();
+              self.imageCollection
+                .insert(imageDoc_, {safe: true})
+                .fail(defer.error)
+                .then(function (inserted) {
+                  if (inserted) {
+                    defer.next(inserted[0]);
+                  } else {
+                    defer.error('Failed to save image doc.');
+                  }
+                });
+            } else {
+              defer.error(imageModel.getInvalidFields());
+            }
+          }
+        });
+    }
+    return false;
   },
 
   /**
@@ -110,7 +121,7 @@ ImageProcesser.prototype = {
               url:url
             });
             if (imageModel.isValid()) {
-              self.saveImageModel(imageModel.toDoc()).then(defer.next).fail(defer.error);
+              self.saveImageDoc(imageModel.toDoc()).then(defer.next).fail(defer.error);
             } else {
               defer.error(imageModel.getInvalidFields());
             }
@@ -137,23 +148,16 @@ ImageProcesser.prototype = {
             defer.error(err);
             return;
           }
-          if (info) {
-            if (info.size) {
-              imageDoc.width = info.size.width;
-              imageDoc.height = info.size.height;
-            }
+          if (info && info.size) {
+            imageDoc.width = info.size.width;
+            imageDoc.height = info.size.height;
             var type = info.type || info.Type;
             type = type.toLowerCase();
-            type = type === 'jpeg' ? 'jpg' : type;
+            type = type === 'jpeg' || /JPEG/.test(info.format) ? 'jpg' : type;
             imageDoc.type = type;
             imageDoc.meta = info;
             imageDoc.data = data;
-            var imageModel = new ImageModel(imageDoc);
-            if (imageModel.isValid()) {
-              self.saveImageModel(imageModel).then(defer.next).fail(defer.error);
-            } else {
-              defer.error(imageModel.getInvalidFields());
-            }
+            self.saveImageDoc(imageDoc).then(defer.next).fail(defer.error);
           } else {
             defer.error('Error: GM can not get image info');
           }
