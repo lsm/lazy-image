@@ -10,7 +10,7 @@ var exec = require('child_process').exec;
 var fs = require('fs');
 var readFile = genji.defer(fs.readFile, fs);
 var gm = require('gm');
-var model = require('./model');
+var model = require('./../lib/model');
 var ImageModel = model.ImageModel;
 var Stream = require('stream');
 
@@ -23,7 +23,7 @@ function ImageProcesser(options, db) {
   var options_ = extend({}, {dbCollection:'lazy_images', tmpDir:'/tmp'}, options);
   // mongodb-async collection object
   if (!db) {
-    db = connect(options_.dbHost, options_.dbPort, {poolSize:options_.dbPoolSize}).db(options_.dbName, {});
+    db = connect(options_.dbHost, options_.dbPort, {poolSize:options_.dbPoolSize}).db(options_.dbName);
   }
   this.imageCollection = db.collection(options_.dbCollection);
   this.tmpDir = options_.tmpDir;
@@ -181,48 +181,6 @@ ImageProcesser.prototype = {
    * @param {String} filePath
    * @return {Deferrable}
    */
-  saveImageFile: function (filePath, imageDoc, unlink) {
-    var self = this;
-    imageDoc = imageDoc || {};
-    return readFile(filePath)
-      .and(function (defer, data) {
-        gm(filePath).identify(function (err, info) {
-          if (err) {
-            defer.error(err);
-            return;
-          }
-          if (info && info.size) {
-            imageDoc.width = info.size.width;
-            imageDoc.height = info.size.height;
-            var type = info.type || info.Type;
-            type = type.toLowerCase();
-            type = type === 'jpeg' || /JPEG/.test(info.format) ? 'jpg' : type;
-            imageDoc.type = type;
-            imageDoc.meta = info;
-            imageDoc.data = data;
-            self.saveImageDoc(imageDoc).then(defer.next).fail(defer.error);
-          } else {
-            defer.error('Error: GM can not get image info');
-          }
-        });
-      }).and(function (defer, imageDoc) {
-        if (!unlink) return true;
-        fs.unlink(filePath, function (err) {
-          if (err) {
-            defer.error(err);
-          } else {
-            defer.next(imageDoc);
-          }
-        });
-      });
-  },
-
-  /**
-   * Read file from `filePath` and save to database
-   *
-   * @param {String} filePath
-   * @return {Deferrable}
-   */
   saveImageFileAndRemove: function (filePath, imageDoc) {
     return this.saveImageFile(filePath, imageDoc, true);
   },
@@ -279,12 +237,13 @@ ImageProcesser.prototype = {
       date: imageDoc.date,
       filename: imageDoc.filename
     };
-    console.log(queryDoc);
+    console.log(3);
     var resized = this.imageCollection.findOne(queryDoc, {fields:this.defaultFields})
       .and(function (defer, imageFound) {
         if (imageFound) {
           return true;
         } else {
+          console.log(33);
           self.loadImageToPath(imageDoc).then(defer.next).fail(defer.error);
         }
       });
@@ -317,7 +276,8 @@ ImageProcesser.prototype = {
         console.log(5);
         console.log(imageDoc);
         console.log(filePath);
-        self.saveImageFileAndRemove(filePath, imageDoc).then(defer.next).fail(defer.error);
+        var imageDoc_ = ImageModel.toDoc(imageDoc);
+        self.saveImageFileAndRemove(filePath, imageDoc_).then(defer.next).fail(defer.error);
       })
       .and(function (defer, resizedImageDoc) {
         delete resizedImageDoc.data;
@@ -333,6 +293,7 @@ ImageProcesser.prototype = {
    */
   loadImageToPath:function (imageDoc, filePath) {
     filePath = filePath || path.join(this.tmpDir, imageDoc.filename || imageDoc._id);
+    console.log(imageDoc);
     var queryDoc = {
       date: imageDoc.date,
       _id: imageDoc._id
@@ -371,7 +332,6 @@ ImageProcesser.prototype = {
     if (!height || Number(height) === 0) {
       height = undefined;
     }
-    console.log(arguments);
     gm(filePath)
       .resize(width, height)
       .noProfile()

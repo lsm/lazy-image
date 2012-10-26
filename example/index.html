@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html>
 <head>
+  <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
   <title>Image Upload App</title>
 </head>
 <body>
 
-<form id="uploadForm" method="post" enctype="multipart/form-data" action="{{uploadAction}}">
+<form id="uploadForm" accept-charset="utf-8"
+      method="post" enctype="multipart/form-data" action="/image/upload/image/file">
   <p>Choose image file: <input id="imageField" type="file" name="fileselect[]" multipl
                                e="multiple"/>
   </p>
@@ -34,7 +36,7 @@
         var uploadUrl = '/image/upload/image/file';
         if ($('#uploadBlob').prop('checked')) {
           uploadType = 'blob';
-          uploadUrl = '/image/upload/image/blob';
+          uploadUrl = '/image/upload/image/stream';
         }
 
         var fileReader = new FileReader();
@@ -46,13 +48,14 @@
           $('#previewWrap').append($previewDiv);
 
           var xhr = new XMLHttpRequest();
-          if (xhr.upload && file.size <= 1024 * 1024 * 10) {
+          if (FormData && xhr.send && file.size <= 1024 * 1024 * 10) {
             // file received/failed
             xhr.onreadystatechange = function (e) {
               if (xhr.readyState == 4) {
                 if (xhr.status === 200) {
                   var json = JSON.parse(e.currentTarget.responseText);
-                  var imageUrl = '/image/get/' + json._id + '.jpg';
+                  var filename = json.filename;
+                  var imageUrl = '/image/' + json.filename + '.jpg';
                   $img.attr('src', imageUrl);
                   $img.attr('id', json._id);
                   $img.attr('title', json._id);
@@ -67,7 +70,7 @@
             xhr.setRequestHeader("X-FILENAME", file.name);
             xhr.send(uploadType === 'file' ? new FormData(document.getElementById('uploadForm')) : file);
           } else {
-            alert(file.size <= 1024 * 1024 * 10 ? 'Please use chrome/firefox4+' : 'Image too big');
+            alert(file.size <= 1024 * 1024 * 10 ? 'Please use chrome5+/safari5+/firefox4+' : 'Image too big');
           }
         };
 

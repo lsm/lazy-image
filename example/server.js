@@ -16,7 +16,7 @@ var options = {
   dbHost: '127.0.0.1',
   dbPort: 27017,
   dbCollection: 'images',
-  exts:['.png', '.jpg', '.jpeg'],
+  exts:['.png', '.jpg', '.jpeg', '.gif'],
   maxFieldsSize:8388608 // 8MB
 };
 
@@ -27,8 +27,8 @@ var uploadApp = new lazyImage.ImageUploadApp(options);
 genji.loadApp(uploadApp);
 
 // process app
-var processApp = new lazyImage.ImageProcessApp(options);
-genji.loadApp(processApp);
+var accessApp = new lazyImage.ImageAccessApp(options);
+genji.loadApp(accessApp);
 
 // index.html and jquery
 var route = genji.route();
