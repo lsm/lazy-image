@@ -7,7 +7,7 @@
 //pngnq
 
 var genji = require('genji');
-var lazyImage = require('../index.js');
+var LazyImage = require('../index.js');
 var Path = require('path');
 
 var options = {
@@ -17,18 +17,22 @@ var options = {
   dbPort: 27017,
   dbCollection: 'images',
   exts:['.png', '.jpg', '.jpeg', '.gif'],
-  maxFieldsSize:8388608 // 8MB
+  maxImageSize:8388608 // 8MB
 };
 
 genji.use('conditional-get');
 
 // upload app
-var uploadApp = new lazyImage.ImageUploadApp(options);
+var uploadApp = new LazyImage.ImageUploadApp(options);
 genji.loadApp(uploadApp);
 
-// process app
-var accessApp = new lazyImage.ImageAccessApp(options);
+// access app
+var accessApp = new LazyImage.ImageAccessApp(options);
 genji.loadApp(accessApp);
+
+// process app
+var processApp = new LazyImage.ImageProcessApp(options);
+genji.loadApp(processApp);
 
 // index.html and jquery
 var route = genji.route();
