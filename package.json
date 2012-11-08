@@ -1,7 +1,7 @@
 {
   "name": "lazy-image",
   "description": "An image compressing/resizing http server",
-  "version": "0.4.3",
+  "version": "0.4.4",
   "homepage": "https://github.com/zir/lazy-image",
   "keywords": ["graphicsmagick", "imagemagick", "gm", "image", "mongodb", "compress", "resize", "jpg", "jpeg", "png", "gif"],
   "author": "Senmiao Liu <zir.echo@gmail.com>",
