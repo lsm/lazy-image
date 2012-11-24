@@ -12,7 +12,7 @@
   "main": "./index",
   "dependencies": {
     "gm": "1.5.x",
-    "genji": "~0.5.7",
+    "genji": "~0.5.8",
     "mongodb-async": "~0.3.2",
     "request": "~2.11.4",
     "formidable": "1.0.x",
